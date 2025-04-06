@@ -123,6 +123,7 @@ class FeatureSelection(BaseEstimator, TransformerMixin):
     def fit(self, X, y=None, study_per_patient=None, n_genes = 2000):
         self.n_genes = n_genes
         self.study_per_patient = study_per_patient
+        
         if self.study_per_patient is None:
             raise ValueError("study_per_patient must be provided.")
         selected_studies = [
@@ -131,11 +132,6 @@ class FeatureSelection(BaseEstimator, TransformerMixin):
             "AAML1031",
             "TCGA-LAML",
             "LEUCEGENE"
-        ]
-        selected_studies = [
-            "A",
-            "B",
-            "C"
         ]
         top_genes_by_study = {}
         

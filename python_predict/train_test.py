@@ -7,30 +7,35 @@ import numpy as np
 import pandas as pd
 
 
-def load_data(directory, nrows = None):
+import os
+import pandas as pd
+import numpy as np
+from datetime import datetime
+
+def load_data(directory):
     """
-    Loads data from CSV files in a given directory based on file types and dates.
+    Loads data from CSV files in a given directory based on file types and dates,
+    returning NumPy arrays.
 
     This function searches the provided directory for CSV files starting with specific
-    file types (e.g. 'meta', 'GDC_counts', and 'RGAs'). It extracts the date from the 
-    filename and selects the newest file for each file type. The data is then loaded 
-    into pandas DataFrames (or Series).
+    file types (e.g. 'meta', 'GDC_counts', and 'RGAs'). It extracts the date from the
+    filename and selects the newest file for each file type. The data is then loaded
+    using pandas and converted to NumPy arrays.
 
     Parameters
     ----------
     directory : str
         Path to the directory containing the CSV files.
-    n_rows : int, optional
-        Number of rows to read from the counts file (default is 3000).
 
     Returns
     -------
-    meta_data : pd.DataFrame
-        Data loaded from the newest 'meta' file.
-    counts_data : pd.DataFrame
-        Gene count data loaded from the newest 'GDC_counts' file.
-    y : pd.Series
-        The target variable ('ICC_Subtype') loaded from the newest 'RGAs' file.
+    studies : np.ndarray
+        NumPy array loaded from the 'Studies' column of the newest 'meta' file.
+    X : np.ndarray
+        NumPy array of gene count data loaded from the newest 'GDC_counts' file.
+        Rows correspond to samples/observations, columns to genes/features.
+    y : np.ndarray
+        NumPy array of the target variable ('ICC_Subtype') loaded from the newest 'RGAs' file.
     """
     # List all files in the directory.
     files = os.listdir(directory)
@@ -38,9 +43,10 @@ def load_data(directory, nrows = None):
     def extract_date(filename, file_type):
         """
         Extracts the date from the filename if it starts with the specified file_type.
-        
-        If the filename does not start with the provided file_type, returns the minimum
-        datetime value so that it is not selected as the newest file.
+
+        If the filename does not start with the provided file_type or the date format
+        is incorrect, returns the minimum datetime value so that it is not selected
+        as the newest file.
 
         Parameters
         ----------
@@ -52,33 +58,56 @@ def load_data(directory, nrows = None):
         Returns
         -------
         datetime
-            The extracted date from the filename or datetime.min if not matching.
+            The extracted date from the filename or datetime.min if not matching or error.
         """
         # Ensure the filename starts with the given file type.
         if not filename.lower().startswith(file_type.lower()):
             return datetime.min
-        # Extract the date part from the filename (assumes format: <type>_<...>_<date>.csv)
-        date_str = filename.split('_')[-1].replace('.csv', '')
-        return datetime.strptime(date_str, '%d%b%Y')
+        try:
+            # Extract the date part from the filename (assumes format: <type>_<...>_<date>.csv)
+            date_str = filename.split('_')[-1].replace('.csv', '')
+            return datetime.strptime(date_str, '%d%b%Y')
+        except (ValueError, IndexError):
+             # Handle cases where splitting or date parsing fails
+             return datetime.min
+
+    # Filter for CSV files first to avoid errors with non-CSV files
+    csv_files = [f for f in files if f.lower().endswith('.csv')]
+
+    if not csv_files:
+        raise FileNotFoundError(f"No CSV files found in directory: {directory}")
 
     # Find the newest file for each type based on the extracted date.
-    meta = max([f for f in files if f.endswith('.csv')],
-               key=lambda x: extract_date(x, 'meta'))
-    counts = max([f for f in files if f.endswith('.csv')],
-                 key=lambda x: extract_date(x, 'GDC_counts'))
-    RGAs = max([f for f in files if f.endswith('.csv')],
-               key=lambda x: extract_date(x, 'RGAs'))
+    meta_file = max(csv_files, key=lambda x: extract_date(x, 'meta'))
+    counts_file = max(csv_files, key=lambda x: extract_date(x, 'GDC_counts'))
+    rgas_file = max(csv_files, key=lambda x: extract_date(x, 'RGAs'))
+
+    # Construct full paths
+    meta_path = os.path.join(directory, meta_file)
+    counts_path = os.path.join(directory, counts_file)
+    rgas_path = os.path.join(directory, rgas_file)
 
     # Load CSV data into pandas DataFrames/Series.
-    meta_data = pd.read_csv(os.path.join(directory, meta))
-    if nrows != None:
-        counts_data = pd.read_csv(os.path.join(directory, counts), index_col=0, engine='c', nrows=nrows)
-    else:
-        counts_data = pd.read_csv(os.path.join(directory, counts), index_col=0, engine='c')
-    
-    y = pd.read_csv(os.path.join(directory, RGAs), index_col=0)['ICC_Subtype']
+    X_df = pd.read_csv(counts_path, index_col=0, engine='c')
+    studies_series = pd.read_csv(meta_path)["Studies"]
+    y_series = pd.read_csv(rgas_path, index_col=0)["ICC_Subtype"]
 
-    return meta_data, counts_data, y
+    # --- Convert to NumPy arrays ---
+    # .values returns the underlying numpy array representation
+    studies = studies_series.values
+    X = X_df.transpose().values
+    y = y_series.values
+
+    print(f"  Studies: {len(studies)}")
+    print(f"  X shape: {X.shape}")
+    print(f"  y: {len(y)}")
+    
+    # Check if the number of samples aligns after loading
+    if not (len(studies) == X.shape[0] == len(y)):
+        raise ValueError("Loaded data dimensions do not align.")
+    
+    return studies, X, y
+
 
 from sklearn.model_selection import cross_validate
 from sklearn.metrics import make_scorer, accuracy_score
