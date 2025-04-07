@@ -106,8 +106,57 @@ def load_data(directory):
     if not (len(studies) == X.shape[0] == len(y)):
         raise ValueError("Loaded data dimensions do not align.")
     
-    return studies, X, y
+    return X, y, studies
 
+def filter_data(X, y, study_labels):
+    """
+    Removes samples based on class counts and selected studies.
+
+    Args:
+        X (numpy.ndarray): Feature matrix.
+        y (numpy.ndarray): Target labels.
+        study_labels (numpy.ndarray): Study labels.
+
+    Returns:
+        tuple: Filtered X, y, and study_labels.
+    """
+
+    unique_classes, class_counts = np.unique(y, return_counts=True)
+    valid_classes = unique_classes[class_counts >= 20]
+
+    valid_classes = [c for c in valid_classes if c != "AML NOS" and c != "Missing data"]
+
+    valid_indices_classes = np.isin(y, valid_classes)
+
+    selected_studies = [
+        "BEATAML1.0-COHORT",
+        "AAML0531",
+        "AAML1031",
+        "TCGA-LAML",
+        "LEUCEGENE"
+    ]
+
+    valid_indices_studies = np.isin(study_labels, selected_studies)
+
+    # Combine the indices to keep samples that satisfy both conditions
+    valid_indices = valid_indices_classes & valid_indices_studies
+
+    filtered_X = X[valid_indices]
+    filtered_y = y[valid_indices]
+    filtered_study_labels = study_labels[valid_indices]
+
+    print(f"  Studies: {len(filtered_study_labels)}")
+    print(f"  X shape: {filtered_X.shape}")
+    print(f"  y: {len(filtered_y)}")
+
+    return filtered_X, filtered_y, filtered_study_labels
+
+def encode_labels(y):
+    """Encodes string labels to integers and returns the mapping."""
+    unique_labels = np.unique(y)
+    label_to_int = {label: i for i, label in enumerate(unique_labels)}
+    int_y = np.array([label_to_int[label] for label in y])
+    return int_y, label_to_int
 
 from sklearn.model_selection import cross_validate
 from sklearn.metrics import make_scorer, accuracy_score

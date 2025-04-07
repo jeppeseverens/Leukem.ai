@@ -123,9 +123,10 @@ class FeatureSelection(BaseEstimator, TransformerMixin):
     def fit(self, X, y=None, study_per_patient=None, n_genes = 2000):
         self.n_genes = n_genes
         self.study_per_patient = study_per_patient
-        
+
         if self.study_per_patient is None:
             raise ValueError("study_per_patient must be provided.")
+        
         selected_studies = [
             "BEATAML1.0-COHORT",
             "AAML0531",
@@ -138,7 +139,7 @@ class FeatureSelection(BaseEstimator, TransformerMixin):
         for study in selected_studies:
             mask = self.study_per_patient == study
             if mask.sum() == 0:
-                print("MASK SUM == 0")
+                print(f"  For study: {study}, mask sum == 0")
                 continue
             X_study_arr = X[mask, :]
             top_genes_by_study[study] = self._compute_top_genes(X_study_arr)
@@ -146,6 +147,7 @@ class FeatureSelection(BaseEstimator, TransformerMixin):
         # Compute the intersection of top genes and preserve the original order.
         intersect_genes = set.intersection(*top_genes_by_study.values())
         self.mvgs_ = [i for i in intersect_genes]
+        
         return self
 
     def transform(self, X, y=None):
