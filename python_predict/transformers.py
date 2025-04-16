@@ -139,7 +139,6 @@ class FeatureSelection(BaseEstimator, TransformerMixin):
         for study in selected_studies:
             mask = self.study_per_patient == study
             if mask.sum() == 0:
-                print(f"  For study: {study}, mask sum == 0")
                 continue
             X_study_arr = X[mask, :]
             top_genes_by_study[study] = self._compute_top_genes(X_study_arr)

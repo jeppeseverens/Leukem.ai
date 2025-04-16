@@ -89,9 +89,15 @@ def load_data(directory):
 
     # Load CSV data into pandas DataFrames/Series.
     X_df = pd.read_csv(counts_path, index_col=0, engine='c')
+    X_df.index.name = None
+    X_df.columns.name = None
+
     studies_series = pd.read_csv(meta_path)["Studies"]
     y_series = pd.read_csv(rgas_path, index_col=0)["ICC_Subtype"]
 
+    print(f"  studies_series: {len(studies_series)}")
+    print(f"  X_df: {X_df.shape}")
+    print(f"  y_series: {len(y_series)}")
     # --- Convert to NumPy arrays ---
     # .values returns the underlying numpy array representation
     studies = studies_series.values
@@ -108,7 +114,7 @@ def load_data(directory):
     
     return X, y, studies
 
-def filter_data(X, y, study_labels):
+def filter_data(X, y, study_labels, min_n = 20):
     """
     Removes samples based on class counts and selected studies.
 
@@ -120,9 +126,10 @@ def filter_data(X, y, study_labels):
     Returns:
         tuple: Filtered X, y, and study_labels.
     """
+    X = np.array(X, dtype=np.float32)
 
     unique_classes, class_counts = np.unique(y, return_counts=True)
-    valid_classes = unique_classes[class_counts >= 20]
+    valid_classes = unique_classes[class_counts >= min_n]
 
     valid_classes = [c for c in valid_classes if c != "AML NOS" and c != "Missing data"]
 
@@ -140,7 +147,7 @@ def filter_data(X, y, study_labels):
 
     # Combine the indices to keep samples that satisfy both conditions
     valid_indices = valid_indices_classes & valid_indices_studies
-
+    
     filtered_X = X[valid_indices]
     filtered_y = y[valid_indices]
     filtered_study_labels = study_labels[valid_indices]
