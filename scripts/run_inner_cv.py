@@ -54,6 +54,7 @@ def main():
     # Create the output directory if it doesn't exist
     output_dir = f"out/{args.model_type}"
     os.makedirs(output_dir, exist_ok=True)
+    print(output_dir)
 
     # Load and prepare data
     print("Loading and preparing data")
@@ -83,12 +84,19 @@ def main():
         }
     elif args.model_type == "SVM":
         from sklearn.svm import SVC
-        model = SVC()
+        model = SVC
         param_grid = {
             'n_genes': [1000, 2000, 3000],
             'C': [0.1, 1, 10, 100, 1000],  
             'gamma': ['auto', 'scale', 0.0001, 0.001, 0.01, 0.1],  
             'class_weight': ["balanced", None],
+            'probability': [True]
+        }
+        param_grid = {
+            'n_genes': [1000],
+            'C': [0.1],  
+            'gamma': ['auto', 'scale'],  
+            'class_weight': ["balanced"],
             'probability': [True]
         }
     else:
