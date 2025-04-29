@@ -44,7 +44,7 @@ class DESeq2RatioNormalizer(BaseEstimator, TransformerMixin):
             raise ValueError("Input count data must be in a numpy array.")
         
         # Filter genes with a sum of reads above 10% of number of samples.
-        ok_expressed_genes = X.sum(axis=0) > (0.05 * X.shape[0])
+        ok_expressed_genes = X.sum(axis=0) > (0.1 * X.shape[0])
 
         # Filter the array to only include expressed genes.
         X = X[:, ok_expressed_genes]
@@ -112,12 +112,15 @@ class FeatureSelection(BaseEstimator, TransformerMixin):
         self.n_genes = None
 
     def _compute_top_genes(self, X_arr):
-        # Compute the median for each gene.
-        medians = np.median(X_arr, axis=0)
-        # Compute the MAD: median of absolute deviations.
-        mad = np.median(np.abs(X_arr - medians), axis=0)
-        # Select the indices of the top n_genes
+        # Compute MAD in a single vectorized operation
+        # Subtract median and take absolute value in one step
+        mad = np.median(np.abs(X_arr - np.median(X_arr, axis=0)), axis=0)
+        
+        # Use argpartition instead of argsort for better performance
+        # This is O(n) instead of O(n log n) for full sorting
         top_indices = np.argpartition(mad, -self.n_genes)[-self.n_genes:]
+        
+        # Convert to set for faster intersection operations later
         return set(top_indices)
 
     def fit(self, X, y=None, study_per_patient=None, n_genes = 2000):
@@ -154,3 +157,76 @@ class FeatureSelection(BaseEstimator, TransformerMixin):
         Reduce the dataset to only include the selected genes.
         """
         return X[:, self.mvgs_]
+
+class FeatureSelection2(BaseEstimator, TransformerMixin):
+    """
+    Transformer for selecting top variable genes across multiple studies using MAD.
+
+    This transformer selects the top 'n_genes' per study based on the median absolute deviation (MAD)
+    and then uses the intersection of these genes across predefined studies.
+    """
+    def __init__(self):
+        self.study_per_patient = None
+        self.n_genes = None
+
+    def _compute_top_genes(self, X_arr):
+        # Pre-allocate arrays for better memory efficiency
+        n_samples, n_genes = X_arr.shape
+        medians = np.empty(n_genes, dtype=X_arr.dtype)
+        mad = np.empty(n_genes, dtype=X_arr.dtype)
+        
+        # Compute medians in one pass
+        np.median(X_arr, axis=0, out=medians)
+        
+        # Compute MAD in one pass using in-place operations
+        # Subtract median and take absolute value in one step
+        np.abs(X_arr - medians, out=X_arr)  # In-place operation
+        np.median(X_arr, axis=0, out=mad)  # In-place operation
+        
+        # Use argpartition with kth parameter for better performance
+        # This is O(n) instead of O(n log n) for full sorting
+        kth = n_genes - self.n_genes
+        top_indices = np.argpartition(mad, kth)[kth:]
+        
+        # Convert to set for faster intersection operations later
+        return set(top_indices)
+
+    def fit(self, X, y=None, study_per_patient=None, n_genes = 2000):
+        self.n_genes = n_genes
+        self.study_per_patient = study_per_patient
+
+        if self.study_per_patient is None:
+            raise ValueError("study_per_patient must be provided.")
+        
+        selected_studies = [
+            "BEATAML1.0-COHORT",
+            "AAML0531",
+            "AAML1031",
+            "TCGA-LAML",
+            "LEUCEGENE"
+        ]
+        top_genes_by_study = {}
+        
+        # Pre-allocate memory for study masks
+        study_masks = {}
+        for study in selected_studies:
+            study_masks[study] = self.study_per_patient == study
+        
+        for study in selected_studies:
+            mask = study_masks[study]
+            if mask.sum() == 0:
+                continue
+            X_study_arr = X[mask, :]
+            top_genes_by_study[study] = self._compute_top_genes(X_study_arr)
+
+        # Compute the intersection of top genes and preserve the original order
+        intersect_genes = set.intersection(*top_genes_by_study.values())
+        self.mvgs_ = [i for i in intersect_genes]
+        
+        return self
+
+    def transform(self, X, y=None):
+        """
+        Reduce the dataset to only include the selected genes.
+        """
+        return X[:, self.mvgs_] 

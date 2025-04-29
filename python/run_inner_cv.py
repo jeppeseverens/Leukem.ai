@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src import train_test, transformers, classifiers
+import train_test, transformers, classifiers
 
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -105,7 +105,7 @@ def main():
     # Define the pipeline
     pipe = Pipeline([
         ('DEseq2', transformers.DESeq2RatioNormalizer()),
-        ('feature_selection', transformers.FeatureSelection()),
+        ('feature_selection', transformers.FeatureSelection2()),
         ('scaler', StandardScaler())
     ])
 
