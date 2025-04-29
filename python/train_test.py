@@ -4,7 +4,12 @@ import os
 from datetime import datetime
 
 from sklearn.model_selection import ParameterGrid, StratifiedKFold, cross_val_predict
-from sklearn.metrics import accuracy_score, f1_score, cohen_kappa_score, matthews_corrcoef
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    cohen_kappa_score,
+    matthews_corrcoef,
+)
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import StratifiedKFold
 from sklearn.model_selection import ParameterGrid
@@ -17,6 +22,7 @@ import polars as pl
 ###################################################################################
 # Helper functions                                                                #
 ###################################################################################
+
 
 def load_data(directory):
     """
@@ -71,22 +77,22 @@ def load_data(directory):
             return datetime.min
         try:
             # Extract the date part from the filename (assumes format: <type>_<...>_<date>.csv)
-            date_str = filename.split('_')[-1].replace('.csv', '')
-            return datetime.strptime(date_str, '%d%b%Y')
+            date_str = filename.split("_")[-1].replace(".csv", "")
+            return datetime.strptime(date_str, "%d%b%Y")
         except (ValueError, IndexError):
-             # Handle cases where splitting or date parsing fails
-             return datetime.min
+            # Handle cases where splitting or date parsing fails
+            return datetime.min
 
     # Filter for CSV files first to avoid errors with non-CSV files
-    csv_files = [f for f in files if f.lower().endswith('.csv')]
+    csv_files = [f for f in files if f.lower().endswith(".csv")]
 
     if not csv_files:
         raise FileNotFoundError(f"No CSV files found in directory: {directory}")
 
     # Find the newest file for each type based on the extracted date.
-    meta_file = max(csv_files, key=lambda x: extract_date(x, 'meta'))
-    counts_file = max(csv_files, key=lambda x: extract_date(x, 'GDC_counts'))
-    rgas_file = max(csv_files, key=lambda x: extract_date(x, 'RGAs'))
+    meta_file = max(csv_files, key=lambda x: extract_date(x, "meta"))
+    counts_file = max(csv_files, key=lambda x: extract_date(x, "GDC_counts"))
+    rgas_file = max(csv_files, key=lambda x: extract_date(x, "RGAs"))
 
     # Construct full paths
     meta_path = os.path.join(directory, meta_file)
@@ -95,7 +101,7 @@ def load_data(directory):
 
     # Load CSV data into pandas DataFrames/Series.
     X_df = pl.read_csv(counts_path).to_pandas()
-    #X_df = pd.read_csv(counts_path, index_col=0, engine='c')
+    # X_df = pd.read_csv(counts_path, index_col=0, engine='c')
 
     X_df = X_df.set_index(X_df.columns[0])
 
@@ -117,14 +123,15 @@ def load_data(directory):
     print(f"  Studies: {len(studies)}")
     print(f"  X shape: {X.shape}")
     print(f"  y: {len(y)}")
-    
+
     # Check if the number of samples aligns after loading
     if not (len(studies) == X.shape[0] == len(y)):
         raise ValueError("Loaded data dimensions do not align.")
-    
+
     return X, y, studies
 
-def filter_data(X, y, study_labels, min_n = 20):
+
+def filter_data(X, y, study_labels, min_n=20):
     """
     Removes samples based on class counts and selected studies.
 
@@ -150,14 +157,14 @@ def filter_data(X, y, study_labels, min_n = 20):
         "AAML0531",
         "AAML1031",
         "TCGA-LAML",
-        "LEUCEGENE"
+        "LEUCEGENE",
     ]
 
     valid_indices_studies = np.isin(study_labels, selected_studies)
 
     # Combine the indices to keep samples that satisfy both conditions
     valid_indices = valid_indices_classes & valid_indices_studies
-    
+
     filtered_X = X[valid_indices]
     filtered_y = y[valid_indices]
     filtered_study_labels = study_labels[valid_indices]
@@ -168,6 +175,7 @@ def filter_data(X, y, study_labels, min_n = 20):
 
     return filtered_X, filtered_y, filtered_study_labels
 
+
 def encode_labels(y):
     """Encodes string labels to integers and returns the mapping."""
     unique_labels = np.unique(y)
@@ -175,24 +183,28 @@ def encode_labels(y):
     int_y = np.array([label_to_int[label] for label in y])
     return int_y, label_to_int
 
+
 def restore_labels(df, label_mapping):
     df = df.dropna()
 
     int_to_label = {v: k for k, v in label_mapping.items()}
-    if 'class' in df.columns:
+    if "class" in df.columns:
         # OvR case
-        df['class_label'] = df['class'].map(int_to_label)
+        df["class_label"] = df["class"].map(int_to_label)
         return df
 
-    elif 'class_0' in df.columns and 'class_1' in df.columns:
+    elif "class_0" in df.columns and "class_1" in df.columns:
         # OvO case
-        df['class_0_label'] = df['class_0'].map(int_to_label)
-        df['class_1_label'] = df['class_1'].map(int_to_label)
+        df["class_0_label"] = df["class_0"].map(int_to_label)
+        df["class_1_label"] = df["class_1"].map(int_to_label)
         return df
-    
+
     else:
         return df
+
+
 # Costum metric
+
 
 def conditional_f1(y_true, preds):
     """
@@ -203,37 +215,43 @@ def conditional_f1(y_true, preds):
 
     if len(unique_y_true) == 1 and unique_y_true[0] == 0:
         # Only 0s in y_true, treat 0 as positive
-        return f1_score(y_true, preds, average='binary', pos_label=0)
+        return f1_score(y_true, preds, average="binary", pos_label=0)
     else:
         # Treat 1 as positive
-        return f1_score(y_true, preds, average='binary', pos_label=1)
+        return f1_score(y_true, preds, average="binary", pos_label=1)
+
 
 ###################################################################################
 # Main function to evaluate one set of hyperparameters for inner cross validation #
 ###################################################################################
 
-def evaluate_inner_fold(outer_fold, inner_fold,
-                        processed_X, y_train_inner, y_val_inner,
-                        model,
-                        params,
-                        multi_type = "standard"):
-    
-      
+
+def evaluate_inner_fold(
+    outer_fold,
+    inner_fold,
+    processed_X,
+    y_train_inner,
+    y_val_inner,
+    model,
+    params,
+    multi_type="standard",
+):
+
     def standard_eval():
         le = LabelEncoder()
         y_train_inner_enc = le.fit_transform(y_train_inner)
         clf.fit(X_train_inner, y_train_inner_enc)
         preds = clf.predict(X_val_inner)
         preds = le.inverse_transform(preds)
-        
+
         return {
-            'outer_fold': outer_fold,
-            'inner_fold': inner_fold,
-            'params': params,
-            'accuracy': accuracy_score(y_val_inner, preds),
-            'f1_macro': f1_score(y_val_inner, preds, average='macro'),
-            'mcc': matthews_corrcoef(y_val_inner, preds),
-            'kappa': cohen_kappa_score(y_val_inner, preds)
+            "outer_fold": outer_fold,
+            "inner_fold": inner_fold,
+            "params": params,
+            "accuracy": accuracy_score(y_val_inner, preds),
+            "f1_macro": f1_score(y_val_inner, preds, average="macro"),
+            "mcc": matthews_corrcoef(y_val_inner, preds),
+            "kappa": cohen_kappa_score(y_val_inner, preds),
         }
 
     def ovr_eval():
@@ -245,7 +263,7 @@ def evaluate_inner_fold(outer_fold, inner_fold,
 
             y_train_bin = np.array(y_train_bin, dtype=np.int32)
 
-            if (len(np.unique(y_train_bin)) == 1):
+            if len(np.unique(y_train_bin)) == 1:
                 continue
 
             y_val_bin = np.array(y_val_bin, dtype=np.int32)
@@ -255,16 +273,18 @@ def evaluate_inner_fold(outer_fold, inner_fold,
             preds = preds[:, 1]
             preds = (preds >= 0.5).astype(int)
 
-            results.append({
-                'outer_fold': outer_fold,
-                'inner_fold': inner_fold,
-                'class': cl,
-                'params': params,
-                'accuracy': accuracy_score(y_val_bin, preds),
-                'f1_binary': conditional_f1(y_val_bin, preds),
-                'mcc': matthews_corrcoef(y_val_bin, preds),
-                'kappa': cohen_kappa_score(y_val_bin, preds)
-            })
+            results.append(
+                {
+                    "outer_fold": outer_fold,
+                    "inner_fold": inner_fold,
+                    "class": cl,
+                    "params": params,
+                    "accuracy": accuracy_score(y_val_bin, preds),
+                    "f1_binary": conditional_f1(y_val_bin, preds),
+                    "mcc": matthews_corrcoef(y_val_bin, preds),
+                    "kappa": cohen_kappa_score(y_val_bin, preds),
+                }
+            )
         return results
 
     def ovo_eval():
@@ -274,19 +294,22 @@ def evaluate_inner_fold(outer_fold, inner_fold,
             train_mask = [(yy == i or yy == j) for yy in y_train_inner]
             val_mask = [(yy == i or yy == j) for yy in y_val_inner]
 
-            if (sum(train_mask) == 0 or sum(val_mask) == 0):
+            if sum(train_mask) == 0 or sum(val_mask) == 0:
                 continue
-            
+
             X_train_ij = X_train_inner[train_mask]
-            y_train_ij = np.array([yy for yy in y_train_inner if yy == i or yy == j], dtype=np.int32) 
+            y_train_ij = np.array(
+                [yy for yy in y_train_inner if yy == i or yy == j], dtype=np.int32
+            )
             y_train_ij = (y_train_ij == i).astype(np.int32)
 
             X_val_ij = X_val_inner[val_mask]
-            y_val_ij = np.array([yy for yy in y_val_inner if yy == i or yy == j], dtype=np.int32)
-            y_val_ij = (y_val_ij == i).astype(np.int32) 
+            y_val_ij = np.array(
+                [yy for yy in y_val_inner if yy == i or yy == j], dtype=np.int32
+            )
+            y_val_ij = (y_val_ij == i).astype(np.int32)
 
-            if (len(np.unique(y_train_ij)) == 1 or 
-                len(np.unique(y_val_ij)) == 1):
+            if len(np.unique(y_train_ij)) == 1 or len(np.unique(y_val_ij)) == 1:
                 continue
 
             clf.fit(X_train_ij, y_train_ij)
@@ -294,70 +317,91 @@ def evaluate_inner_fold(outer_fold, inner_fold,
             preds = preds[:, 1]
             preds = (preds >= 0.5).astype(int)
 
-            results.append({
-                'outer_fold': outer_fold,
-                'inner_fold': inner_fold,
-                'class_0': i,
-                'class_1': j,
-                'params': params,
-                'accuracy': accuracy_score(y_val_ij, preds),
-                'f1_binary': conditional_f1(y_val_ij, preds),
-                'mcc': matthews_corrcoef(y_val_ij, preds),
-                'kappa': cohen_kappa_score(y_val_ij, preds)
-            })
+            results.append(
+                {
+                    "outer_fold": outer_fold,
+                    "inner_fold": inner_fold,
+                    "class_0": i,
+                    "class_1": j,
+                    "params": params,
+                    "accuracy": accuracy_score(y_val_ij, preds),
+                    "f1_binary": conditional_f1(y_val_ij, preds),
+                    "mcc": matthews_corrcoef(y_val_ij, preds),
+                    "kappa": cohen_kappa_score(y_val_ij, preds),
+                }
+            )
         return results
 
     # Dispatch table for clean logic
-    eval_dispatch = {
-        'standard': standard_eval,
-        'OvR': ovr_eval,
-        'OvO': ovo_eval
-    }
+    eval_dispatch = {"standard": standard_eval, "OvR": ovr_eval, "OvO": ovo_eval}
 
     if multi_type not in eval_dispatch:
         raise ValueError(f"Unsupported evaluation type: {multi_type}")
-    
+
     # Select preprocessed data
-    n_genes = params.pop('n_genes')
+    n_genes = params.pop("n_genes")
     X_train_inner, X_val_inner = processed_X[n_genes]
 
     # Set classifier
     clf = clone(model(**params))
-    params['n_genes'] = n_genes
+    params["n_genes"] = n_genes
 
     return eval_dispatch[multi_type]()
+
 
 ###################################################################################
 # Main functions for standard inner cross validation                              #
 ###################################################################################
 
-def pre_process_data(n_genes_list, X_train_outer, y_train_outer, train_inner_idx, val_inner_idx, study_labels_outer, pipe):
-        
-        X_train_inner = X_train_outer[train_inner_idx]
-        X_val_inner = X_train_outer[val_inner_idx]
 
-        study_labels_inner = study_labels_outer[train_inner_idx]
-        
-        y_train_inner = y_train_outer[train_inner_idx]
-        y_val_inner = y_train_outer[val_inner_idx]
+def pre_process_data(
+    n_genes_list,
+    X_train_outer,
+    y_train_outer,
+    train_inner_idx,
+    val_inner_idx,
+    study_labels_outer,
+    pipe,
+):
 
-        y_train_inner = np.array(y_train_inner, dtype=np.int32)
-        y_val_inner = np.array(y_val_inner, dtype=np.int32)
-        
-        processed_X = {}
-        for n_genes_i in n_genes_list:
-            pipe_inner = clone(pipe)
+    X_train_inner = X_train_outer[train_inner_idx]
+    X_val_inner = X_train_outer[val_inner_idx]
 
-            X_train_inner_proc = pipe_inner.fit_transform(X_train_inner, 
-                                                feature_selection__study_per_patient=study_labels_inner, 
-                                                feature_selection__n_genes=n_genes_i)
-            X_val_inner_proc = pipe_inner.transform(X_val_inner)
+    study_labels_inner = study_labels_outer[train_inner_idx]
+
+    y_train_inner = y_train_outer[train_inner_idx]
+    y_val_inner = y_train_outer[val_inner_idx]
+
+    y_train_inner = np.array(y_train_inner, dtype=np.int32)
+    y_val_inner = np.array(y_val_inner, dtype=np.int32)
+
+    processed_X = {}
+    for n_genes_i in n_genes_list:
+        pipe_inner = clone(pipe)
+
+        X_train_inner_proc = pipe_inner.fit_transform(
+            X_train_inner,
+            feature_selection__study_per_patient=study_labels_inner,
+            feature_selection__n_genes=n_genes_i,
+        )
+        X_val_inner_proc = pipe_inner.transform(X_val_inner)
+
+        processed_X[n_genes_i] = [X_train_inner_proc, X_val_inner_proc]
+    return processed_X, y_train_inner, y_val_inner
 
 
-            processed_X[n_genes_i] = [X_train_inner_proc, X_val_inner_proc]
-        return processed_X, y_train_inner, y_val_inner
-
-def run_inner_cv(X, y, study_labels, model, param_grid, n_jobs, pipe, multi_type =  "standard", k_out = 5, k_in = 5):
+def run_inner_cv(
+    X,
+    y,
+    study_labels,
+    model,
+    param_grid,
+    n_jobs,
+    pipe,
+    multi_type="standard",
+    k_out=5,
+    k_in=5,
+):
     # Define cv folds
     outer_cv = StratifiedKFold(n_splits=k_out, shuffle=True, random_state=42)
     inner_cv = StratifiedKFold(n_splits=k_in, shuffle=True, random_state=42)
@@ -377,23 +421,28 @@ def run_inner_cv(X, y, study_labels, model, param_grid, n_jobs, pipe, multi_type
         X_train_outer = X[train_idx]
         y_train_outer = y[train_idx]
         study_labels_outer = study_labels[train_idx]
-        
-        combined_outer = [str(a) + " " + str(b) for a, b in zip(y_train_outer, study_labels_outer)]
+
+        combined_outer = [
+            str(a) + " " + str(b) for a, b in zip(y_train_outer, study_labels_outer)
+        ]
 
         # Make inner fold splits
-        for inner_fold, (train_inner_idx, val_inner_idx) in enumerate(inner_cv.split(X_train_outer, combined_outer)):
+        for inner_fold, (train_inner_idx, val_inner_idx) in enumerate(
+            inner_cv.split(X_train_outer, combined_outer)
+        ):
             print("inner_fold")
             print(inner_fold)
 
             # Once per inner fold, data is preprocessed
             processed_X, y_train_inner, y_val_inner = pre_process_data(
-                param_grid["n_genes"], 
+                param_grid["n_genes"],
                 X_train_outer,
-                y_train_outer, 
-                train_inner_idx, 
-                val_inner_idx, 
+                y_train_outer,
+                train_inner_idx,
+                val_inner_idx,
                 study_labels_outer,
-                pipe)
+                pipe,
+            )
 
             inner_tasks = []
 
@@ -401,13 +450,18 @@ def run_inner_cv(X, y, study_labels, model, param_grid, n_jobs, pipe, multi_type
             # Multi model can be done in standard manner for the model (i.e. defined by the programmer who made the clf function)
             # Or manually OvR or OvO
             for params in param_combos:
-                inner_tasks.append(delayed(evaluate_inner_fold)(
-                    outer_fold, inner_fold,
-                    processed_X, y_train_inner, y_val_inner,
-                    model,
-                    params,
-                    multi_type = multi_type # standard, OvR, OvO
-                ))
+                inner_tasks.append(
+                    delayed(evaluate_inner_fold)(
+                        outer_fold,
+                        inner_fold,
+                        processed_X,
+                        y_train_inner,
+                        y_val_inner,
+                        model,
+                        params,
+                        multi_type=multi_type,  # standard, OvR, OvO
+                    )
+                )
 
             # Run inner CV tasks in parallel
             inner_results = Parallel(n_jobs=n_jobs, verbose=1)(inner_tasks)
@@ -423,20 +477,25 @@ def run_inner_cv(X, y, study_labels, model, param_grid, n_jobs, pipe, multi_type
             else:
                 raise ValueError("Unexpected structure in inner_results")
 
-
     # Convert to DataFrame
     df_parallel_results = pd.DataFrame(all_results)
-    return(df_parallel_results)
+    return df_parallel_results
+
 
 ###################################################################################
 # Main function for leave one study out (loso) inner cross validation             #
 ###################################################################################
 
-def pre_process_data_loso(n_genes_list,
-                                 X_train_inner, X_val_inner,
-                                 y_train_inner, y_val_inner, # y values aren't strictly needed here but kept for consistency
-                                 study_labels_inner, # Labels corresponding to X_train_inner
-                                 pipe):
+
+def pre_process_data_loso(
+    n_genes_list,
+    X_train_inner,
+    X_val_inner,
+    y_train_inner,
+    y_val_inner,  # y values aren't strictly needed here but kept for consistency
+    study_labels_inner,  # Labels corresponding to X_train_inner
+    pipe,
+):
     """
     Preprocesses inner training and validation sets for different n_genes.
     Fits the pipeline ONLY on the inner training set.
@@ -446,9 +505,12 @@ def pre_process_data_loso(n_genes_list,
         # Clone the pipeline for this specific n_genes setting
         pipe_inner = clone(pipe)
 
-        X_train_inner_proc = pipe_inner.fit_transform(X_train_inner, y_train_inner, # Pass y if needed by steps
-                                                  feature_selection__study_per_patient=study_labels_inner,
-                                                  feature_selection__n_genes=n_genes_i)
+        X_train_inner_proc = pipe_inner.fit_transform(
+            X_train_inner,
+            y_train_inner,  # Pass y if needed by steps
+            feature_selection__study_per_patient=study_labels_inner,
+            feature_selection__n_genes=n_genes_i,
+        )
 
         # Transform the inner validation data (1 study) using the fitted pipeline
         X_val_inner_proc = pipe_inner.transform(X_val_inner)
@@ -458,30 +520,35 @@ def pre_process_data_loso(n_genes_list,
     # Return the dictionary of processed data and the original inner y values
     return processed_X, y_train_inner, y_val_inner
 
-def run_inner_cv_loso(X, y, study_labels, model, param_grid, n_jobs, multi_type =  "standard"):
+
+def run_inner_cv_loso(
+    X, y, study_labels, model, param_grid, n_jobs, multi_type="standard"
+):
     # Define the studies to use as folds
     studies_as_folds = [
         "BEATAML1.0-COHORT",
         "AAML0531",
         "AAML1031",
         "TCGA-LAML",
-        "LEUCEGENE"
+        "LEUCEGENE",
     ]
     param_combos = list(ParameterGrid(param_grid))
 
     all_results = []
     n_genes_list = param_grid["n_genes"]
     for test_study_name in studies_as_folds:
-        print(f"\n--- Outer Loop: Holding out Study '{test_study_name}' for Testing ---")
+        print(
+            f"\n--- Outer Loop: Holding out Study '{test_study_name}' for Testing ---"
+        )
 
         # Create masks for outer split
-        test_mask = (study_labels == test_study_name)
+        test_mask = study_labels == test_study_name
         train_mask = ~test_mask
 
         # Outer training set (N-1 studies)
         X_train_outer = X[train_mask]
         y_train_outer = y[train_mask]
-        study_labels_outer = study_labels[train_mask] # Labels for outer training set
+        study_labels_outer = study_labels[train_mask]  # Labels for outer training set
 
         # Get the unique studies present in the outer training set
         train_studies = np.unique(study_labels_outer)
@@ -491,27 +558,32 @@ def run_inner_cv_loso(X, y, study_labels, model, param_grid, n_jobs, multi_type 
         for validation_study_name in train_studies:
             print(f"  Inner Loop: Validating on Study '{validation_study_name}'")
             # Create masks for inner split (relative to outer training data)
-            val_inner_mask = (study_labels_outer == validation_study_name)
+            val_inner_mask = study_labels_outer == validation_study_name
             train_inner_mask = ~val_inner_mask
 
             # Inner training set (N-2 studies)
             X_train_inner = X_train_outer[train_inner_mask]
             y_train_inner = y_train_outer[train_inner_mask]
-            study_labels_inner = study_labels_outer[train_inner_mask] # Labels for inner training
+            study_labels_inner = study_labels_outer[
+                train_inner_mask
+            ]  # Labels for inner training
 
             # Inner validation set (1 study)
             X_val_inner = X_train_outer[val_inner_mask]
             y_val_inner = y_train_outer[val_inner_mask]
 
-
             # --- Pre-process Data ONCE for this inner fold ---
             # This computes processed versions for all n_genes values
-            processed_X_inner, y_train_inner_proc, y_val_inner_proc = pre_process_data_loso(
-                n_genes_list,
-                X_train_inner, X_val_inner,
-                y_train_inner, y_val_inner,
-                study_labels_inner, # Pass inner training labels for pipeline fitting
-                pipe
+            processed_X_inner, y_train_inner_proc, y_val_inner_proc = (
+                pre_process_data_loso(
+                    n_genes_list,
+                    X_train_inner,
+                    X_val_inner,
+                    y_train_inner,
+                    y_val_inner,
+                    study_labels_inner,  # Pass inner training labels for pipeline fitting
+                    pipe,
+                )
             )
 
             tasks = []
@@ -519,40 +591,44 @@ def run_inner_cv_loso(X, y, study_labels, model, param_grid, n_jobs, multi_type 
             # --- Create tasks for hyperparameter evaluation for THIS inner fold ---
             for params in param_combos:
                 # Append a delayed evaluation task for each hyperparameter combination
-                tasks.append(delayed(evaluate_inner_fold)(
-                    test_study_name,        # Identifier for the outer fold (held-out test study)
-                    validation_study_name,  # Identifier for the inner fold (validation study)
-                    processed_X_inner,      # Pre-calculated processed data for all n_genes
-                    y_train_inner_proc,     # Inner training labels
-                    y_val_inner_proc,       # Inner validation labels
-                    model,                  # Classifier class
-                    params,                 # Current hyperparameter combination
-                    multi_type = multi_type         # Choose evaluation type: "standard", "OvR", "OvO"
-                ))
+                tasks.append(
+                    delayed(evaluate_inner_fold)(
+                        test_study_name,  # Identifier for the outer fold (held-out test study)
+                        validation_study_name,  # Identifier for the inner fold (validation study)
+                        processed_X_inner,  # Pre-calculated processed data for all n_genes
+                        y_train_inner_proc,  # Inner training labels
+                        y_val_inner_proc,  # Inner validation labels
+                        model,  # Classifier class
+                        params,  # Current hyperparameter combination
+                        multi_type=multi_type,  # Choose evaluation type: "standard", "OvR", "OvO"
+                    )
+                )
             # --- Execute tasks for the current inner fold in parallel ---
             if tasks:
                 inner_results_list = Parallel(n_jobs=n_jobs, verbose=1)(tasks)
 
                 # Flatten the results if needed (depends on eval_type)
                 for res_item in inner_results_list:
-                    if isinstance(res_item, list): # OvR or OvO might return lists
+                    if isinstance(res_item, list):  # OvR or OvO might return lists
                         all_results.extend(res_item)
-                    elif isinstance(res_item, dict): # Standard eval returns dict
+                    elif isinstance(res_item, dict):  # Standard eval returns dict
                         all_results.append(res_item)
                     else:
-                        print(f"Warning: Unexpected result type encountered: {type(res_item)}")
-                
+                        print(
+                            f"Warning: Unexpected result type encountered: {type(res_item)}"
+                        )
+
             else:
-                print(f"  No evaluation tasks generated for outer fold '{test_study_name}'.")
+                print(
+                    f"  No evaluation tasks generated for outer fold '{test_study_name}'."
+                )
 
             # --- End Hyperparameter Loop ---
         print(f"  Finished evaluations for outer fold '{test_study_name}'.")
         # --- End Inner Loop ---
 
-        
-
     df_parallel_results_study_as_fold = pd.DataFrame(all_results)
-    return(df_parallel_results_study_as_fold)
+    return df_parallel_results_study_as_fold
 
 
 # old

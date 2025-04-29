@@ -66,7 +66,7 @@ def main():
     if args.model_type == "XGBOOST":
         model = classifiers.WeightedXGBClassifier
         param_grid = {
-            'n_genes': [1000, 2000, 3000],
+            'n_genes': [2000, 3000, 5000],
             'class_weight': [True, False],
             'max_depth': [2, 3, 4, 5],
             'learning_rate': [0.01, 0.1, 0.3],
@@ -91,6 +91,48 @@ def main():
             'gamma': ['auto', 'scale', 0.0001, 0.001, 0.01, 0.1],  
             'class_weight': ["balanced", None],
             'probability': [True]
+        }
+        param_grid = {
+            'n_genes': [1000],
+            'C': [0.1],  
+            'gamma': ['auto', 'scale'],  
+            'class_weight': ["balanced"],
+            'probability': [True]
+        }
+    elif args.model_type == "NN":
+        model = classifiers.NeuralNet
+        param_grid = {
+            'n_genes': [2000, 3000, 5000],
+            'n_neurons':[
+                        [800,400,100],
+                        [400,200,50],
+                        [200,100,25],
+                        [800,400],
+                        [400,200],
+                        [200,100],
+                        [400],
+                        [200]
+                        ],
+            'use_batch_norm': [True, False],
+            'dropout_rate': [0.2,0.5], 
+            'batch_size': [32],
+            'patience': [100],
+            'l2_reg': [0.001, 0],
+            'validation_split': [0.2],
+            'class_weight': [True, False],
+            'min_delta': [0],
+            'learning_rate': [0.0001]
+        }
+        params = {
+            'n_neurons': [800, 400, 200],  # three hidden layers
+            'dropout_rate': 0.2,
+            'batch_size': 32,
+            'patience': 100,
+            'l2_reg': 0.001,
+            'validation_split': 0.2,
+            'class_weight': True,
+            'min_delta': 0,
+            'learning_rate': 0.001
         }
         param_grid = {
             'n_genes': [1000],
